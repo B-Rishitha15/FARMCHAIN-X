@@ -93,10 +93,9 @@ A complete full-stack agricultural traceability system that enables end-to-end t
 
 We would like to thank the following contributors for their valuable contributions to this project:
 
-- **Frontend**: Yogeshwar Bonthu
-- **Backend**: Niharika Python
-- **Python**: Rishitha Batchu
-
+Frontend: Yogeshwar Bonthu
+Backend: Niharika Darsiguntla
+Python: Rishitha Batchu
 
 
 
