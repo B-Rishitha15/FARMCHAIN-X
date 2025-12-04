@@ -95,7 +95,7 @@ We would like to thank the following contributors for their valuable contributio
 
 - **Frontend**: Yogeshwar Bonthu
 - **Backend**: Niharika Python
-- **Additional Contributor**: Rishitha Batchu
+- **Python**: Rishitha Batchu
 
 
 
