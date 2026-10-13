@@ -778,9 +778,9 @@ const QRScanner = () => {
           </div>
 
           <p style={styles.message}>
-            These details are based on the inventory record returned by
-            the backend. Viewing or scanning a QR code does not itself
-            mean the crop has been purchased or sold.
+            Explore this crop's journey from farm to consumer.
+            The details above show its current recorded status in the
+            FarmChainX supply chain.
           </p>
         </section>
       )}
