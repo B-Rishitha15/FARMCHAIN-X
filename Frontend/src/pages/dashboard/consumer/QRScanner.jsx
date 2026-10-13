@@ -1,441 +1,789 @@
-import React, { useState, useRef } from 'react';
-import jsQR from 'jsqr';
-import { motion } from 'framer-motion';
-import { useApp } from '../../../context/AppContext';
-import { TRANSACTION_TYPES } from '../../../utils/constants';
-import { parseQRData, generateCropJourney } from '../../../utils/helpers';
-import Card from '../../../components/ui/Card';
-import Button from '../../../components/ui/Button';
-import Modal from '../../../components/ui/Modal';
-import { 
-  QrCode, 
-  Camera, 
-  AlertCircle, 
-  CheckCircle,
-  MapPin,
-  Calendar,
-  User,
-  Package,
-  ArrowRight,
-  Leaf
-} from 'lucide-react';
 
-const QRScanner = () => {
-  const { state, actions } = useApp();
-  const { user, crops, transactions } = state;
-  
-  const [isScanning, setIsScanning] = useState(false);
-  const [scannedData, setScannedData] = useState(null);
-  const [showResultModal, setShowResultModal] = useState(false);
-  const [error, setError] = useState('');
-  const [cropJourney, setCropJourney] = useState([]);
-  const videoRef = useRef(null);
-  const canvasRef = useRef(null);
-  const fileInputRef = useRef(null);
+import React, { useEffect, useState } from "react";
+import jsQR from "jsqr";
 
-  const handleScan = () => {
-    setIsScanning(true);
-    setError('');
-    
-    // Simulate QR code scanning
-    setTimeout(() => {
-      // Mock QR data - in a real app, this would come from the camera
-      const mockQRData = {
-        cropId: crops[0]?.id || '1',
-        name: crops[0]?.name || 'Organic Tomatoes',
-        farmer: crops[0]?.farmerName || 'John Farmer',
-        location: crops[0]?.location || 'Green Valley Farm, CA',
-        timestamp: crops[0]?.createdAt || new Date().toISOString()
-      };
-      
-      const crop = crops.find(c => c.id === mockQRData.cropId);
-      if (crop) {
-        setScannedData(mockQRData);
-        setCropJourney(generateCropJourney(crop, transactions));
-        setShowResultModal(true);
-        
-        // Add scan transaction
-        actions.addTransaction({
-          type: TRANSACTION_TYPES.PURCHASE,
-          cropId: crop.id,
-          userId: user.id,
-          userName: user.name,
-          timestamp: new Date().toISOString(),
-          details: `Scanned QR code for ${crop.name}`
-        });
-        
-        actions.addNotification({
-          type: 'success',
-          message: 'QR Code scanned successfully!',
-          description: `Found information for ${crop.name}`
-        });
-      } else {
-        setError('Crop not found in the system. Please try scanning a valid QR code.');
-      }
-      
-      setIsScanning(false);
-    }, 2000);
+const API_BASE_URL = "http://localhost:8080/api";
+
+const styles = {
+  container: {
+    padding: "24px",
+    maxWidth: "1000px",
+    margin: "0 auto",
+    color: "#1f2937",
+    fontFamily: "Arial, sans-serif",
+  },
+  heading: {
+    marginBottom: "8px",
+    color: "#166534",
+  },
+  description: {
+    color: "#64748b",
+    marginBottom: "24px",
+  },
+  section: {
+    background: "#ffffff",
+    border: "1px solid #e5e7eb",
+    borderRadius: "12px",
+    padding: "20px",
+    marginBottom: "20px",
+    boxShadow: "0 2px 8px rgba(0,0,0,0.04)",
+  },
+  select: {
+    width: "100%",
+    padding: "12px",
+    marginTop: "8px",
+    border: "1px solid #cbd5e1",
+    borderRadius: "8px",
+    fontSize: "15px",
+    background: "#fff",
+  },
+  button: {
+    padding: "11px 18px",
+    border: "none",
+    borderRadius: "8px",
+    background: "#15803d",
+    color: "#fff",
+    cursor: "pointer",
+    fontWeight: "bold",
+    marginRight: "10px",
+    marginTop: "12px",
+  },
+  secondaryButton: {
+    padding: "11px 18px",
+    border: "1px solid #15803d",
+    borderRadius: "8px",
+    background: "#fff",
+    color: "#166534",
+    cursor: "pointer",
+    fontWeight: "bold",
+    marginTop: "12px",
+  },
+  detailGrid: {
+    display: "grid",
+    gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))",
+    gap: "12px",
+    marginTop: "16px",
+  },
+  detail: {
+    padding: "12px",
+    borderRadius: "8px",
+    background: "#f8fafc",
+    border: "1px solid #e2e8f0",
+    overflowWrap: "anywhere",
+  },
+  message: {
+    padding: "12px",
+    borderRadius: "8px",
+    marginTop: "14px",
+    background: "#f1f5f9",
+  },
+  error: {
+    color: "#b91c1c",
+    background: "#fef2f2",
+    padding: "12px",
+    borderRadius: "8px",
+    marginTop: "14px",
+  },
+  success: {
+    color: "#166534",
+    background: "#f0fdf4",
+    padding: "12px",
+    borderRadius: "8px",
+    marginTop: "14px",
+  },
+  qrImage: {
+    width: "220px",
+    maxWidth: "100%",
+    display: "block",
+    margin: "16px auto",
+  },
+  canvas: {
+    display: "none",
+  },
+  stage: {
+    display: "inline-block",
+    padding: "7px 12px",
+    background: "#dcfce7",
+    color: "#166534",
+    borderRadius: "20px",
+    fontWeight: "bold",
+  },
+};
+
+const toPrice = (value) => {
+  if (value === null || value === undefined || value === "") {
+    return null;
+  }
+
+  const number = Number(value);
+  return Number.isFinite(number) ? number : null;
+};
+
+const formatPrice = (value) =>
+  value !== null && value !== undefined
+    ? `₹${Number(value).toLocaleString("en-IN")}`
+    : "Not available";
+
+const formatDate = (value) => {
+  if (!value) return "Not available";
+
+  const date = new Date(`${value}`.slice(0, 10) + "T00:00:00");
+
+  if (Number.isNaN(date.getTime())) return String(value);
+
+  return date.toLocaleDateString("en-IN");
+};
+
+const formatStage = (value) => {
+  if (!value) return "Not available";
+
+  const normalized = String(value)
+    .trim()
+    .replace(/[\s-]+/g, "_")
+    .toUpperCase();
+
+  const labels = {
+    AT_FARMER: "At Farmer",
+    AT_DISTRIBUTOR: "At Distributor",
+    SENT_TO_DISTRIBUTOR: "Sent to Distributor",
+    AT_RETAILER: "At Retailer",
+    SENT_TO_RETAILER: "Sent to Retailer",
+    AVAILABLE_FOR_SALE: "Available for Sale",
+    SOLD: "Sold to Consumer",
+    SOLD_TO_CONSUMER: "Sold to Consumer",
   };
-
-  const handleUploadClick = () => {
-    if (fileInputRef.current) {
-      fileInputRef.current.value = null; // reset
-      fileInputRef.current.click();
-    }
-  };
-
-  const handleFileChange = async (e) => {
-    const file = e.target.files && e.target.files[0];
-    if (!file) return;
-    setError('');
-    setIsScanning(true);
-    try {
-      const reader = new FileReader();
-      reader.onload = async (event) => {
-        try {
-          const image = new Image();
-          image.onload = () => {
-            const canvas = canvasRef?.current || document.createElement('canvas');
-            canvas.width = image.width;
-            canvas.height = image.height;
-            const ctx = canvas.getContext('2d');
-            ctx.drawImage(image, 0, 0, canvas.width, canvas.height);
-            try {
-              const imgData = ctx.getImageData(0, 0, canvas.width, canvas.height);
-              const code = jsQR(imgData.data, imgData.width, imgData.height);
-              if (!code || !code.data) {
-                setError('No QR code found in the uploaded image.');
-                setIsScanning(false);
-                return;
-              }
-
-              // code.data contains the QR payload
-              const parsed = parseQRData(code.data);
-              if (!parsed) {
-                // If not JSON, assume raw id string
-                const cropById = crops.find(c => c.id === code.data || c.qrCode === code.data);
-                if (cropById) {
-                  setScannedData({ cropId: cropById.id, name: cropById.name, farmer: cropById.farmerName, location: cropById.location, timestamp: cropById.createdAt });
-                  setCropJourney(generateCropJourney(cropById, transactions));
-                  setShowResultModal(true);
-                  actions.addTransaction({
-                    type: TRANSACTION_TYPES.PURCHASE,
-                    cropId: cropById.id,
-                    userId: user.id,
-                    userName: user.name,
-                    timestamp: new Date().toISOString(),
-                    details: `Uploaded QR image and scanned ${cropById.name}`
-                  });
-                  actions.addNotification({ type: 'success', message: 'QR uploaded and parsed successfully', description: `Found ${cropById.name}` });
-                } else {
-                  setError('QR payload not recognized or crop not found');
-                }
-              } else {
-                const found = crops.find(c => c.id === parsed.cropId || c.qrCode === parsed.cropId || c.qrCode === parsed.qrCode);
-                if (found) {
-                  setScannedData(parsed);
-                  setCropJourney(generateCropJourney(found, transactions));
-                  setShowResultModal(true);
-                  actions.addTransaction({
-                    type: TRANSACTION_TYPES.PURCHASE,
-                    cropId: found.id,
-                    userId: user.id,
-                    userName: user.name,
-                    timestamp: new Date().toISOString(),
-                    details: `Uploaded QR image and scanned ${found.name}`
-                  });
-                  actions.addNotification({ type: 'success', message: 'QR uploaded and parsed successfully', description: `Found ${found.name}` });
-                } else {
-                  setError('Crop not found in the system for the uploaded QR.');
-                }
-              }
-            } catch (err) {
-              setError('Failed to process the uploaded image.');
-            }
-            setIsScanning(false);
-          };
-          image.onerror = () => {
-            setError('Unable to read the image file.');
-            setIsScanning(false);
-          };
-          image.src = event.target.result;
-        } catch (err) {
-          setError('Invalid file format or unable to decode.');
-          setIsScanning(false);
-        }
-      };
-      reader.readAsDataURL(file);
-    } catch (err) {
-      setError('Failed to read the uploaded file.');
-      setIsScanning(false);
-    }
-  };
-
-  // Demo manual input removed — upload option replaces demo scan.
 
   return (
-    <div className="max-w-4xl mx-auto space-y-6">
-      {/* Header */}
-      <div>
-        <h1 className="text-3xl font-bold text-gray-900 dark:text-white">
-          QR Code Scanner
-        </h1>
-        <p className="text-gray-600 dark:text-gray-400 mt-2">
-          Scan QR codes on food products to trace their journey from farm to table.
-        </p>
-      </div>
+    labels[normalized] ||
+    String(value)
+      .replace(/[_-]+/g, " ")
+      .replace(/\b\w/g, (letter) => letter.toUpperCase())
+  );
+};
 
-      {/* Scanner Interface */}
-      <Card>
-        <Card.Header>
-          <Card.Title>Scan QR Code</Card.Title>
-          <Card.Description>
-            Point your camera at a QR code or upload a QR image using the button below.
-          </Card.Description>
-        </Card.Header>
-        <Card.Content>
-          <div className="space-y-6">
-            {/* Camera Preview Area */}
-            <div className="relative">
-              <div className="aspect-video bg-gray-100 dark:bg-gray-800 rounded-lg border-2 border-dashed border-gray-300 dark:border-gray-600 flex items-center justify-center">
-                {isScanning ? (
-                  <div className="text-center">
-                    <motion.div
-                      animate={{ rotate: 360 }}
-                      transition={{ duration: 2, repeat: Infinity, ease: "linear" }}
-                      className="w-16 h-16 border-4 border-primary-200 border-t-primary-600 rounded-full mx-auto mb-4"
-                    />
-                    <p className="text-gray-600 dark:text-gray-400">
-                      Scanning for QR code...
-                    </p>
-                  </div>
-                ) : (
-                  <div className="text-center">
-                    <QrCode className="h-16 w-16 text-gray-400 mx-auto mb-4" />
-                    <p className="text-gray-600 dark:text-gray-400">
-                      Camera preview will appear here
-                    </p>
-                  </div>
-                )}
-              </div>
-              
-              {/* Scanning Overlay */}
-              {isScanning && (
-                <div className="absolute inset-0 flex items-center justify-center">
-                  <div className="w-48 h-48 border-2 border-primary-500 rounded-lg relative">
-                    <div className="absolute top-0 left-0 w-6 h-6 border-t-4 border-l-4 border-primary-500 rounded-tl-lg"></div>
-                    <div className="absolute top-0 right-0 w-6 h-6 border-t-4 border-r-4 border-primary-500 rounded-tr-lg"></div>
-                    <div className="absolute bottom-0 left-0 w-6 h-6 border-b-4 border-l-4 border-primary-500 rounded-bl-lg"></div>
-                    <div className="absolute bottom-0 right-0 w-6 h-6 border-b-4 border-r-4 border-primary-500 rounded-br-lg"></div>
-                  </div>
-                </div>
-              )}
-            </div>
-            {/* hidden canvas used for uploaded image decoding */}
-            <canvas ref={canvasRef} style={{ display: 'none' }} />
+const mapInventoryItem = (item) => {
+  const product =
+    item.product && typeof item.product === "object"
+      ? item.product
+      : {};
 
-            {/* Error Message */}
-            {error && (
-              <motion.div
-                initial={{ opacity: 0, y: -10 }}
-                animate={{ opacity: 1, y: 0 }}
-                className="flex items-center space-x-2 p-3 bg-red-50 dark:bg-red-900 border border-red-200 dark:border-red-700 rounded-lg"
-              >
-                <AlertCircle className="h-5 w-5 text-red-500" />
-                <p className="text-red-700 dark:text-red-300">{error}</p>
-              </motion.div>
-            )}
+  const owner =
+    item.owner && typeof item.owner === "object"
+      ? item.owner
+      : {};
 
-            {/* Action Buttons */}
-            <div className="flex flex-col sm:flex-row gap-4">
-              <Button
-                onClick={handleScan}
-                disabled={isScanning}
-                loading={isScanning}
-                className="flex-1"
-                size="lg"
-              >
-                <Camera className="h-5 w-5 mr-2" />
-                {isScanning ? 'Scanning...' : 'Start Scanning'}
-              </Button>
-              
-              <input
-                type="file"
-                accept="image/*"
-                ref={fileInputRef}
-                onChange={handleFileChange}
-                className="hidden"
-              />
-              <Button
-                onClick={handleUploadClick}
-                variant="outline"
-                className="flex-1"
-                size="lg"
-              >
-                <QrCode className="h-5 w-5 mr-2" />
-                Upload QR Image
-              </Button>
-            </div>
-          </div>
-        </Card.Content>
-      </Card>
+  return {
+    id: item.id,
+    inventoryId: item.id,
+    productId: item.productId ?? product.id ?? null,
 
-      {/* Instructions */}
-      <Card>
-        <Card.Header>
-          <Card.Title>How to Use</Card.Title>
-          <Card.Description>
-            Follow these steps to scan QR codes and trace your food.
-          </Card.Description>
-        </Card.Header>
-        <Card.Content>
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-            <div className="text-center">
-              <div className="w-12 h-12 bg-primary-100 dark:bg-primary-900 rounded-lg flex items-center justify-center mx-auto mb-3">
-                <Camera className="h-6 w-6 text-primary-600 dark:text-primary-400" />
-              </div>
-              <h3 className="font-semibold text-gray-900 dark:text-white mb-2">1. Scan QR Code</h3>
-              <p className="text-sm text-gray-600 dark:text-gray-400">
-                Point your camera at the QR code on the food product
-              </p>
-            </div>
-            
-            <div className="text-center">
-              <div className="w-12 h-12 bg-green-100 dark:bg-green-900 rounded-lg flex items-center justify-center mx-auto mb-3">
-                <CheckCircle className="h-6 w-6 text-green-600 dark:text-green-400" />
-              </div>
-              <h3 className="font-semibold text-gray-900 dark:text-white mb-2">2. View Information</h3>
-              <p className="text-sm text-gray-600 dark:text-gray-400">
-                See detailed information about the crop and its origin
-              </p>
-            </div>
-            
-            <div className="text-center">
-              <div className="w-12 h-12 bg-purple-100 dark:bg-purple-900 rounded-lg flex items-center justify-center mx-auto mb-3">
-                <MapPin className="h-6 w-6 text-purple-600 dark:text-purple-400" />
-              </div>
-              <h3 className="font-semibold text-gray-900 dark:text-white mb-2">3. Trace Journey</h3>
-              <p className="text-sm text-gray-600 dark:text-gray-400">
-                Follow the complete journey from farm to your table
-              </p>
-            </div>
-          </div>
-        </Card.Content>
-      </Card>
+    name:
+      product.name ||
+      item.name ||
+      item.cropName ||
+      "Unknown Crop",
 
-      {/* Scan Result Modal */}
-      <Modal
-        isOpen={showResultModal}
-        onClose={() => setShowResultModal(false)}
-        title="Crop Information"
-        size="xl"
-      >
-        {scannedData && (
-          <div className="space-y-6">
-            {/* Crop Details */}
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-              <div>
-                <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-4">
-                  Crop Details
-                </h3>
-                <div className="space-y-3">
-                  <div className="flex items-center space-x-3">
-                    <Package className="h-5 w-5 text-gray-500" />
-                    <div>
-                      <p className="font-medium text-gray-900 dark:text-white">{scannedData.name}</p>
-                      <p className="text-sm text-gray-600 dark:text-gray-400">Product Name</p>
-                    </div>
-                  </div>
-                  
-                  <div className="flex items-center space-x-3">
-                    <User className="h-5 w-5 text-gray-500" />
-                    <div>
-                      <p className="font-medium text-gray-900 dark:text-white">{scannedData.farmer}</p>
-                      <p className="text-sm text-gray-600 dark:text-gray-400">Farmer</p>
-                    </div>
-                  </div>
-                  
-                  <div className="flex items-center space-x-3">
-                    <MapPin className="h-5 w-5 text-gray-500" />
-                    <div>
-                      <p className="font-medium text-gray-900 dark:text-white">{scannedData.location}</p>
-                      <p className="text-sm text-gray-600 dark:text-gray-400">Farm Location</p>
-                    </div>
-                  </div>
-                  
-                  <div className="flex items-center space-x-3">
-                    <Calendar className="h-5 w-5 text-gray-500" />
-                    <div>
-                      <p className="font-medium text-gray-900 dark:text-white">
-                        {new Date(scannedData.timestamp).toLocaleDateString()}
-                      </p>
-                      <p className="text-sm text-gray-600 dark:text-gray-400">Harvest Date</p>
-                    </div>
-                  </div>
-                </div>
-              </div>
-              
-              <div>
-                <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-4">
-                  Journey Timeline
-                </h3>
-                <div className="space-y-3">
-                  {cropJourney.map((step, index) => (
-                    <motion.div
-                      key={step.id}
-                      initial={{ opacity: 0, x: -20 }}
-                      animate={{ opacity: 1, x: 0 }}
-                      transition={{ delay: index * 0.1 }}
-                      className="flex items-start space-x-3"
-                    >
-                      <div className={`w-8 h-8 rounded-full flex items-center justify-center text-sm ${
-                        step.status === 'completed' 
-                          ? 'bg-green-100 dark:bg-green-900 text-green-600 dark:text-green-400'
-                          : step.status === 'current'
-                          ? 'bg-primary-100 dark:bg-primary-900 text-primary-600 dark:text-primary-400'
-                          : 'bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-400'
-                      }`}>
-                        {step.status === 'completed' ? '✓' : index + 1}
-                      </div>
-                      <div className="flex-1">
-                        <h4 className="font-medium text-gray-900 dark:text-white">{step.title}</h4>
-                        <p className="text-sm text-gray-600 dark:text-gray-400">{step.description}</p>
-                        <p className="text-xs text-gray-500 dark:text-gray-500 mt-1">
-                          {new Date(step.timestamp).toLocaleString()}
-                        </p>
-                      </div>
-                    </motion.div>
-                  ))}
-                </div>
-              </div>
-            </div>
+    category:
+      product.category ||
+      item.category ||
+      product.cropType ||
+      "Not available",
 
-            <div className="flex space-x-3">
-              <Button
-                onClick={() => setShowResultModal(false)}
-                variant="secondary"
-                className="flex-1"
-              >
-                Close
-              </Button>
-              <Button
-                onClick={() => {
-                  // In a real app, you might want to save this scan or share it
-                  actions.addNotification({
-                    type: 'success',
-                    message: 'Scan saved to history!',
-                    description: 'You can view this scan in your history.'
-                  });
-                  setShowResultModal(false);
-                }}
-                className="flex-1"
-              >
-                Save to History
-              </Button>
-            </div>
+    quantity:
+      item.quantity ??
+      product.quantityKg ??
+      product.quantity ??
+      null,
+
+    quality:
+      product.qualityGrade ??
+      product.quality ??
+      item.qualityGrade ??
+      item.quality ??
+      "Not available",
+
+    location:
+      product.location ||
+      item.location ||
+      item.farmLocation ||
+      "Not available",
+
+    farmerName:
+      owner.name ||
+      item.ownerName ||
+      item.farmerName ||
+      "Not available",
+
+    harvestDate:
+      product.harvestDate ||
+      item.harvestDate ||
+      null,
+
+    farmerPrice: toPrice(
+      product.price ??
+      product.farmerPrice ??
+      item.price ??
+      item.farmerPrice
+    ),
+
+    distributorPrice: toPrice(
+      product.distributorPrice ??
+      item.distributorPrice
+    ),
+
+    retailerPrice: toPrice(
+      product.retailerPrice ??
+      item.retailerPrice
+    ),
+
+    aiScore:
+      product.aiScore ??
+      item.aiScore ??
+      null,
+
+    aiVerdict:
+      product.aiVerdict ||
+      item.aiVerdict ||
+      null,
+
+    stage: formatStage(
+      item.stage ||
+      item.status ||
+      product.status
+    ),
+  };
+};
+
+const QRScanner = () => {
+  const [crops, setCrops] = useState([]);
+  const [selectedInventoryId, setSelectedInventoryId] = useState("");
+  const [scannedCrop, setScannedCrop] = useState(null);
+  const [loading, setLoading] = useState(true);
+  const [scanning, setScanning] = useState(false);
+  const [error, setError] = useState("");
+  const [message, setMessage] = useState("");
+  const [qrImage, setQrImage] = useState("");
+  const [qrLibraryReady, setQrLibraryReady] = useState(false);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    const loadInventory = async () => {
+      setLoading(true);
+      setError("");
+
+      try {
+        const response = await fetch(`${API_BASE_URL}/inventory`);
+
+        if (!response.ok) {
+          throw new Error(
+            `Inventory request failed (${response.status}).`
+          );
+        }
+
+        const inventory = await response.json();
+
+        if (!Array.isArray(inventory)) {
+          throw new Error("The inventory API did not return a list.");
+        }
+
+        const mappedCrops = inventory.map(mapInventoryItem);
+
+        if (!cancelled) {
+          setCrops(mappedCrops);
+
+          if (mappedCrops.length > 0) {
+            setSelectedInventoryId(String(mappedCrops[0].inventoryId));
+          } else {
+            setMessage("No inventory records are available.");
+          }
+        }
+      } catch (err) {
+        if (!cancelled) {
+          setError(
+            `${err.message} Make sure the Spring Boot backend is running.`
+          );
+        }
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
+    };
+
+    loadInventory();
+
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  const createQR = async () => {
+    setError("");
+    setMessage("");
+    setQrImage("");
+    setScannedCrop(null);
+
+    const selectedCrop = crops.find(
+      (crop) =>
+        String(crop.inventoryId) === String(selectedInventoryId)
+    );
+
+    if (!selectedCrop) {
+      setError("Please select a valid inventory record.");
+      return;
+    }
+
+    try {
+      const QRCode = await import("qrcode");
+
+      const payload = JSON.stringify({
+        type: "FARMCHAINX_INVENTORY",
+        inventoryId: selectedCrop.inventoryId,
+        productId: selectedCrop.productId,
+      });
+
+      const image = await QRCode.toDataURL(payload, {
+        width: 320,
+        margin: 2,
+        errorCorrectionLevel: "H",
+      });
+
+      setQrImage(image);
+      setMessage("QR code generated successfully.");
+    } catch (err) {
+      setError(
+        "QR generation failed. Check that the qrcode package is installed."
+      );
+    }
+  };
+
+  const downloadQR = () => {
+    if (!qrImage) {
+      setError("Generate a QR code before downloading.");
+      return;
+    }
+
+    const link = document.createElement("a");
+    link.href = qrImage;
+    link.download = `farmchainx-inventory-${selectedInventoryId}.png`;
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+  };
+
+  const findInventoryFromQR = (payload) => {
+    let qrData;
+
+    try {
+      qrData = JSON.parse(payload);
+    } catch {
+      setError("This QR code does not contain valid FarmChainX data.");
+      return;
+    }
+
+    if (
+      !qrData ||
+      qrData.type !== "FARMCHAINX_INVENTORY" ||
+      qrData.inventoryId === undefined ||
+      qrData.inventoryId === null
+    ) {
+      setError("This is not a valid FarmChainX inventory QR code.");
+      return;
+    }
+
+    const matchedCrop = crops.find(
+      (crop) =>
+        String(crop.inventoryId) === String(qrData.inventoryId)
+    );
+
+    if (!matchedCrop) {
+      setError(
+        `Inventory ID ${qrData.inventoryId} was not found. Refresh the inventory list and scan again.`
+      );
+      return;
+    }
+
+    if (
+      qrData.productId !== undefined &&
+      qrData.productId !== null &&
+      matchedCrop.productId !== null &&
+      String(qrData.productId) !== String(matchedCrop.productId)
+    ) {
+      setError("The product ID in the QR code does not match the inventory record.");
+      return;
+    }
+
+    setScannedCrop(matchedCrop);
+    setSelectedInventoryId(String(matchedCrop.inventoryId));
+    setQrImage("");
+    setError("");
+    setMessage("Crop details loaded from the QR code.");
+  };
+
+  const handleQRUpload = async (event) => {
+    const file = event.target.files?.[0];
+
+    setError("");
+    setMessage("");
+    setScannedCrop(null);
+
+    if (!file) return;
+
+    if (!file.type.startsWith("image/")) {
+      setError("Please upload a QR code image, such as PNG or JPG.");
+      event.target.value = "";
+      return;
+    }
+
+    setScanning(true);
+
+    try {
+      const imageUrl = URL.createObjectURL(file);
+      const image = new Image();
+
+      image.onload = () => {
+        try {
+          const canvas = document.createElement("canvas");
+          const context = canvas.getContext("2d", {
+            willReadFrequently: true,
+          });
+
+          if (!context) {
+            setError("Could not read the uploaded image.");
+            return;
+          }
+
+          canvas.width = image.naturalWidth;
+          canvas.height = image.naturalHeight;
+
+          context.drawImage(image, 0, 0);
+
+          const imageData = context.getImageData(
+            0,
+            0,
+            canvas.width,
+            canvas.height
+          );
+
+          const code = jsQR(
+            imageData.data,
+            imageData.width,
+            imageData.height
+          );
+
+          if (!code) {
+            setError(
+              "No QR code was detected. Upload a clear, uncropped QR image."
+            );
+            return;
+          }
+
+          findInventoryFromQR(code.data);
+        } catch (err) {
+          setError(`Could not scan this image: ${err.message}`);
+        } finally {
+          URL.revokeObjectURL(imageUrl);
+          setScanning(false);
+          event.target.value = "";
+        }
+      };
+
+      image.onerror = () => {
+        URL.revokeObjectURL(imageUrl);
+        setError("The selected image could not be opened.");
+        setScanning(false);
+        event.target.value = "";
+      };
+
+      image.src = imageUrl;
+    } catch (err) {
+      setError(`QR scanning failed: ${err.message}`);
+      setScanning(false);
+      event.target.value = "";
+    }
+  };
+
+  const scanSelectedInventory = () => {
+    setError("");
+    setMessage("");
+
+    const selectedCrop = crops.find(
+      (crop) =>
+        String(crop.inventoryId) === String(selectedInventoryId)
+    );
+
+    if (!selectedCrop) {
+      setError("Crop not found in the system. Please select a valid inventory record.");
+      return;
+    }
+
+    setScannedCrop(selectedCrop);
+    setQrImage("");
+    setMessage("Crop details loaded successfully.");
+  };
+
+  const refreshInventory = async () => {
+    setLoading(true);
+    setError("");
+    setMessage("");
+
+    try {
+      const response = await fetch(`${API_BASE_URL}/inventory`);
+
+      if (!response.ok) {
+        throw new Error(`Inventory request failed (${response.status}).`);
+      }
+
+      const inventory = await response.json();
+
+      if (!Array.isArray(inventory)) {
+        throw new Error("The inventory API did not return a list.");
+      }
+
+      const mappedCrops = inventory.map(mapInventoryItem);
+
+      setCrops(mappedCrops);
+      setScannedCrop(null);
+      setQrImage("");
+
+      if (mappedCrops.length > 0) {
+        const exists = mappedCrops.some(
+          (crop) =>
+            String(crop.inventoryId) === String(selectedInventoryId)
+        );
+
+        if (!exists) {
+          setSelectedInventoryId(String(mappedCrops[0].inventoryId));
+        }
+      }
+
+      setMessage("Inventory refreshed successfully.");
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  return (
+    <div style={styles.container}>
+      <h2 style={styles.heading}>FarmChainX QR Scanner</h2>
+
+      <p style={styles.description}>
+        Scan a crop QR code to view its recorded origin, quality, prices,
+        AI assessment, and supply-chain stage.
+      </p>
+
+      <section style={styles.section}>
+        <h3>1. Select Crop Inventory</h3>
+
+        <label htmlFor="inventorySelect">
+          Choose an inventory record
+        </label>
+
+        <select
+          id="inventorySelect"
+          style={styles.select}
+          value={selectedInventoryId}
+          onChange={(event) => {
+            setSelectedInventoryId(event.target.value);
+            setQrImage("");
+            setScannedCrop(null);
+            setError("");
+            setMessage("");
+          }}
+          disabled={loading || crops.length === 0}
+        >
+          {crops.length === 0 && (
+            <option value="">No inventory available</option>
+          )}
+
+          {crops.map((crop) => (
+            <option
+              key={crop.inventoryId}
+              value={String(crop.inventoryId)}
+            >
+              {crop.name} — Inventory ID: {crop.inventoryId}
+              {crop.productId !== null
+                ? ` — Product ID: ${crop.productId}`
+                : ""}
+            </option>
+          ))}
+        </select>
+
+        <div>
+          <button
+            type="button"
+            style={styles.button}
+            onClick={createQR}
+            disabled={loading || crops.length === 0}
+          >
+            Generate QR Code
+          </button>
+
+          <button
+            type="button"
+            style={styles.secondaryButton}
+            onClick={scanSelectedInventory}
+            disabled={loading || crops.length === 0}
+          >
+            View Selected Crop
+          </button>
+
+          <button
+            type="button"
+            style={styles.secondaryButton}
+            onClick={refreshInventory}
+            disabled={loading}
+          >
+            Refresh Inventory
+          </button>
+        </div>
+
+        {qrImage && (
+          <div style={{ textAlign: "center", marginTop: "20px" }}>
+            <h4>Generated Crop QR Code</h4>
+
+            <img
+              src={qrImage}
+              alt="FarmChainX crop QR code"
+              style={styles.qrImage}
+            />
+
+            <button
+              type="button"
+              style={styles.button}
+              onClick={downloadQR}
+            >
+              Download QR Code
+            </button>
           </div>
         )}
-      </Modal>
+      </section>
+
+      <section style={styles.section}>
+        <h3>2. Scan QR Code Image</h3>
+
+        <p>
+          Upload a QR code image previously generated by FarmChainX.
+        </p>
+
+        <input
+          type="file"
+          accept="image/*"
+          onChange={handleQRUpload}
+          disabled={loading || scanning}
+        />
+
+        {scanning && (
+          <p style={styles.message}>Scanning QR image...</p>
+        )}
+      </section>
+
+      {loading && (
+        <p style={styles.message}>Loading crop inventory...</p>
+      )}
+
+      {error && <p style={styles.error}>{error}</p>}
+
+      {message && !error && (
+        <p style={styles.success}>{message}</p>
+      )}
+
+      {scannedCrop && (
+        <section style={styles.section}>
+          <h3>Verified Crop Details</h3>
+
+          <p>
+            <span style={styles.stage}>{scannedCrop.stage}</span>
+          </p>
+
+          <div style={styles.detailGrid}>
+            <div style={styles.detail}>
+              <strong>Crop Name</strong>
+              <div>{scannedCrop.name}</div>
+            </div>
+
+            <div style={styles.detail}>
+              <strong>Inventory ID</strong>
+              <div>{scannedCrop.inventoryId}</div>
+            </div>
+
+            <div style={styles.detail}>
+              <strong>Product ID</strong>
+              <div>{scannedCrop.productId ?? "Not available"}</div>
+            </div>
+
+            <div style={styles.detail}>
+              <strong>Farmer / Owner</strong>
+              <div>{scannedCrop.farmerName}</div>
+            </div>
+
+            <div style={styles.detail}>
+              <strong>Location</strong>
+              <div>{scannedCrop.location}</div>
+            </div>
+
+            <div style={styles.detail}>
+              <strong>Quantity</strong>
+              <div>
+                {scannedCrop.quantity ?? "Not available"}
+                {scannedCrop.quantity !== null ? " kg" : ""}
+              </div>
+            </div>
+
+            <div style={styles.detail}>
+              <strong>Quality Grade</strong>
+              <div>{scannedCrop.quality}</div>
+            </div>
+
+            <div style={styles.detail}>
+              <strong>Harvest Date</strong>
+              <div>{formatDate(scannedCrop.harvestDate)}</div>
+            </div>
+
+            <div style={styles.detail}>
+              <strong>Farmer Price</strong>
+              <div>{formatPrice(scannedCrop.farmerPrice)}</div>
+            </div>
+
+            <div style={styles.detail}>
+              <strong>Distributor Price</strong>
+              <div>{formatPrice(scannedCrop.distributorPrice)}</div>
+            </div>
+
+            <div style={styles.detail}>
+              <strong>Retailer Selling Price</strong>
+              <div>{formatPrice(scannedCrop.retailerPrice)}</div>
+            </div>
+
+            <div style={styles.detail}>
+              <strong>AI Quality Score</strong>
+              <div>
+                {scannedCrop.aiScore !== null &&
+                scannedCrop.aiScore !== undefined
+                  ? `${scannedCrop.aiScore}%`
+                  : "Not available"}
+              </div>
+            </div>
+
+            <div style={styles.detail}>
+              <strong>AI Verdict</strong>
+              <div>{scannedCrop.aiVerdict || "Not available"}</div>
+            </div>
+
+            <div style={styles.detail}>
+              <strong>Supply Chain Stage</strong>
+              <div>{scannedCrop.stage}</div>
+            </div>
+          </div>
+
+          <p style={styles.message}>
+            These details are based on the inventory record returned by
+            the backend. Viewing or scanning a QR code does not itself
+            mean the crop has been purchased or sold.
+          </p>
+        </section>
+      )}
     </div>
   );
 };

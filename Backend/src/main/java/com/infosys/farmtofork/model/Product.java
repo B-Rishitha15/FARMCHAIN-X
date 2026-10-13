@@ -1,3 +1,4 @@
+
 package com.infosys.farmtofork.model;
 
 import jakarta.persistence.*;
@@ -11,51 +12,61 @@ import java.time.LocalDate;
 @AllArgsConstructor
 @Builder
 public class Product {
+
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
 
     @Column(name = "name", nullable = false)
-    private String name; // Product name
+    private String name;
 
     @Column(name = "crop_type")
-    private String cropType; // Crop Type
+    private String cropType;
 
     @Column(name = "quantity_kg")
-    private Double quantityKg; // Quantity in kg
+    private Double quantityKg;
 
     @Column(name = "quality_grade")
-    private String qualityGrade; // Quality Grade
+    private String qualityGrade;
 
     @Column(name = "harvest_date")
-    private LocalDate harvestDate; // Harvest Date
+    private LocalDate harvestDate;
 
     @Column(name = "location")
-    private String location; // Location
+    private String location;
 
     @Lob
     @Basic(fetch = FetchType.LAZY)
     @Column(name = "image_url", columnDefinition = "LONGTEXT")
-    private String imageUrl; // Base64 or external URL
+    private String imageUrl;
 
-    // Legacy fields retained for database compatibility
+    // Legacy fields retained for compatibility
     @Column(name = "category")
     private String category;
 
     @Column(name = "description")
     private String description;
 
+    // Farmer's base price
     @Column(name = "price")
     private Double price;
 
+    // Distributor's selling price
+    @Column(name = "distributor_price")
+    private Double distributorPrice;
+
+    // Retailer's final selling price
+    @Column(name = "retailer_price")
+    private Double retailerPrice;
+
     @Column(name = "unit")
-    private String unit; // kg, litre, piece
+    private String unit;
 
     @Column(name = "ai_score")
-    private Double aiScore; // 0 - 100 AI freshness score
+    private Double aiScore;
 
     @Column(name = "ai_verdict")
-    private String aiVerdict; // e.g., Good Quality / Bad Quality
+    private String aiVerdict;
 
     public enum Status {
         APPROVED,

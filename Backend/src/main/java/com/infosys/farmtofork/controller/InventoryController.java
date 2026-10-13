@@ -1,19 +1,23 @@
+
 package com.infosys.farmtofork.controller;
 
-import org.springframework.http.ResponseEntity;
-import org.springframework.web.bind.annotation.*;
-import java.util.List;
-import java.util.stream.Collectors;
-import com.infosys.farmtofork.model.Inventory;
 import com.infosys.farmtofork.dto.InventoryRequest;
 import com.infosys.farmtofork.dto.InventoryResponse;
 import com.infosys.farmtofork.dto.ProductResponse;
 import com.infosys.farmtofork.dto.UserResponse;
+import com.infosys.farmtofork.model.Inventory;
 import com.infosys.farmtofork.service.InventoryService;
+
+import org.springframework.http.ResponseEntity;
+import org.springframework.web.bind.annotation.*;
+
+import java.util.List;
+import java.util.stream.Collectors;
 
 @RestController
 @RequestMapping("/api/inventory")
 public class InventoryController {
+
     private final InventoryService inventoryService;
 
     public InventoryController(InventoryService inventoryService) {
@@ -22,22 +26,31 @@ public class InventoryController {
 
     @GetMapping
     public List<InventoryResponse> all() {
-        return inventoryService.getAllInventory().stream().map(this::toResponse).collect(Collectors.toList());
+        return inventoryService.getAllInventory()
+                .stream()
+                .map(this::toResponse)
+                .collect(Collectors.toList());
     }
 
     @GetMapping("/owner/{ownerId}")
     public List<InventoryResponse> byOwner(@PathVariable Long ownerId) {
-        return inventoryService.getInventoryByOwner(ownerId).stream().map(this::toResponse).collect(Collectors.toList());
+        return inventoryService.getInventoryByOwner(ownerId)
+                .stream()
+                .map(this::toResponse)
+                .collect(Collectors.toList());
     }
 
     @PostMapping
-    public ResponseEntity<InventoryResponse> add(@RequestBody InventoryRequest request) {
+    public ResponseEntity<InventoryResponse> add(
+            @RequestBody InventoryRequest request) {
         Inventory saved = inventoryService.addInventory(request);
         return ResponseEntity.ok(toResponse(saved));
     }
 
     @PutMapping("/{id}")
-    public ResponseEntity<InventoryResponse> update(@PathVariable Long id, @RequestBody InventoryRequest request) {
+    public ResponseEntity<InventoryResponse> update(
+            @PathVariable Long id,
+            @RequestBody InventoryRequest request) {
         Inventory updated = inventoryService.updateInventory(id, request);
         return ResponseEntity.ok(toResponse(updated));
     }
@@ -48,44 +61,54 @@ public class InventoryController {
         return ResponseEntity.noContent().build();
     }
 
-    private InventoryResponse toResponse(Inventory it) {
-        ProductResponse p = null;
-        if (it.getProduct() != null) {
-            // map new Product fields to DTO; keep `category` for UI compatibility
-            p = ProductResponse.builder()
-                .id(it.getProduct().getId())
-                .name(it.getProduct().getName())
-                .cropType(it.getProduct().getCropType())
-                .category(it.getProduct().getCropType())
-                .quantityKg(it.getProduct().getQuantityKg())
-                .qualityGrade(it.getProduct().getQualityGrade())
-                .harvestDate(it.getProduct().getHarvestDate() != null ? it.getProduct().getHarvestDate().toString() : null)
-                .location(it.getProduct().getLocation())
-                .status(it.getProduct().getStatus() != null ? it.getProduct().getStatus().name() : null)
-                .imageUrl(it.getProduct().getImageUrl())
-                .aiScore(it.getProduct().getAiScore())
-                .aiVerdict(it.getProduct().getAiVerdict())
-                .price(it.getProduct().getPrice())
-                .build();
+    private InventoryResponse toResponse(Inventory inventory) {
+        ProductResponse productResponse = null;
+
+        if (inventory.getProduct() != null) {
+            var product = inventory.getProduct();
+
+            productResponse = ProductResponse.builder()
+                    .id(product.getId())
+                    .name(product.getName())
+                    .cropType(product.getCropType())
+                    .category(product.getCropType())
+                    .quantityKg(product.getQuantityKg())
+                    .qualityGrade(product.getQualityGrade())
+                    .harvestDate(product.getHarvestDate() != null
+                            ? product.getHarvestDate().toString()
+                            : null)
+                    .location(product.getLocation())
+                    .status(product.getStatus() != null
+                            ? product.getStatus().name()
+                            : null)
+                    .imageUrl(product.getImageUrl())
+                    .aiScore(product.getAiScore())
+                    .aiVerdict(product.getAiVerdict())
+                    .price(product.getPrice())
+                    .distributorPrice(product.getDistributorPrice())
+                    .retailerPrice(product.getRetailerPrice())
+                    .build();
         }
 
-        UserResponse u = null;
-        if (it.getOwner() != null) {
-            u = UserResponse.builder()
-                .id(it.getOwner().getId())
-                .name(it.getOwner().getName())
-                .email(it.getOwner().getEmail())
-                .role(it.getOwner().getRole())
-                .build();
+        UserResponse userResponse = null;
+
+        if (inventory.getOwner() != null) {
+            var owner = inventory.getOwner();
+
+            userResponse = UserResponse.builder()
+                    .id(owner.getId())
+                    .name(owner.getName())
+                    .email(owner.getEmail())
+                    .role(owner.getRole())
+                    .build();
         }
 
         return InventoryResponse.builder()
-            .id(it.getId())
-            .quantity(it.getQuantity())
-            .product(p)
-            .owner(u)
-            .stage(it.getStage())
-            .build();
+                .id(inventory.getId())
+                .quantity(inventory.getQuantity())
+                .product(productResponse)
+                .owner(userResponse)
+                .stage(inventory.getStage())
+                .build();
     }
 }
-
